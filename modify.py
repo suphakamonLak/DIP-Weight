@@ -100,6 +100,8 @@ while True:
             
     # Check door closed again after inserting items
     elif state == "open":
+        sleep(1)
+        
         while GPIO.input(door_sensor) == GPIO.HIGH:  # Wait until door is closed
             statusMessage.configure(text="Close the door to detect...")
             root.update()
