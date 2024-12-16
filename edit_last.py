@@ -2,6 +2,11 @@ import RPi.GPIO as GPIO
 from time import sleep
 import customtkinter as ctk
 import cv2
+from picamera2 import Picamera2 # use control camera pi
+import pandas as pd
+from ultralytics import YOLO
+import cvzone
+import numpy as np
 
 # GPIO setup
 door_sensor = 23  
@@ -94,18 +99,10 @@ while True:
         if GPIO.input(door_sensor) == GPIO.LOW:
             statusMessage.configure(text="Door is closed. Please open it to insert items.")
             root.update()
-            sleep(1)
-
-        else: 
-            GPIO.output(lamp_normal, True)
-            GPIO.output(door_lock, True)  # Unlock the door
-            statusMessage.configure(text="Door unlocked. Please insert items.")
-            root.update()
-            sleep(0.5)
-            GPIO.output(door_lock, False)  # Lock door again
+            print("x")
             state = "open"
-            openButton.pack_forget()  # Hide open button ซ่อนปุ่ม open
-
+            sleep(1)
+            
     # Check door closed again after inserting items
     elif state == "open":
         while GPIO.input(door_sensor) == GPIO.HIGH:  # Wait until door is closed
