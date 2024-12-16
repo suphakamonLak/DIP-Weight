@@ -29,6 +29,9 @@ sterilization_times = {
     "box": 180,  # 3 minutes
 }
 
+detected_objects = set()
+picam2 = Picamera2()
+
 # GUI setup
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -40,8 +43,12 @@ root.title("UVC Sterilization Cabinet")
 statusMessage = ctk.CTkLabel(root, text="Initializing...", font=("Arial", 16))
 statusMessage.pack(pady=20)
 
+# Global variable
+sterilization_time = 0
+
 # function
 def start(): 
+    global sterilization_time
     startButton.pack_forget()  # Hide start button again
     GPIO.output(lamp_normal, False)  # Turn off lamp normal
     GPIO.output(lamp_UVC, True)  # Turn on lamp UVC
