@@ -28,9 +28,7 @@ sterilization_times = {
     "mask": 90, # 1.5 minutes
     "box": 180,  # 3 minutes
 }
-
 detected_objects = set()
-picam2 = Picamera2()
 
 # GUI setup
 ctk.set_appearance_mode("dark")
@@ -43,13 +41,14 @@ root.title("UVC Sterilization Cabinet")
 statusMessage = ctk.CTkLabel(root, text="Initializing...", font=("Arial", 16))
 statusMessage.pack(pady=20)
 
-state = "waiting"
+global state
+state = "insert"
 
 # Global variable
 sterilization_time = 0
 
 # function
-def start(): #ปุ่มเริ่มฆ่าเชื้อ
+def start():
     startButton.pack_forget()  # Hide start button again
     GPIO.output(lamp_normal, False)  # Turn off lamp normal
     GPIO.output(lamp_UVC, True)  # Turn on lamp UVC
@@ -73,6 +72,7 @@ def cancel():
     statusMessage.configure(text="Process canceled. Please open the door to reset.")
     root.update()
     openButton.pack(pady=10)  # Show open button again 
+    global state
     state = "waiting"
 
 def open(): 
@@ -84,6 +84,7 @@ def open():
     sleep(0.5)
     GPIO.output(door_lock, False)  # Lock the door again
     openButton.pack_forget()  # Hide open button
+    global state
     state = "open"
 
 # Buttons 
@@ -95,11 +96,14 @@ openButton.pack(pady=10)
 
 # Main Loop
 while True:
+#     global state
     # Check door close 
     if state == "waiting": sleep(0.1)
             
     # Check door closed again after inserting items
     elif state == "open":
+        #print('xx')
+        sleep(1)
         while GPIO.input(door_sensor) == GPIO.HIGH:  # Wait until door is closed
             statusMessage.configure(text="Close the door to detect...")
             root.update()
@@ -107,6 +111,7 @@ while True:
         statusMessage.configure(text="Door is closed. Detecting items...")
         root.update()
         sleep(1)
+#         global state
         state = "insert"
 
     elif state == "insert":
@@ -114,29 +119,19 @@ while True:
         statusMessage.configure(text="Door is closed. Detecting items...")
         root.update()
         sleep(1)
-        # Simulate object detection 
-        picam2 = Picamera2() # create obj picam2
-        picam2.preview_configuration.main.size = (840,440) # size image
-        picam2.preview_configuration.main.format = "RGB888" # setting image type RGB888
-        picam2.preview_configuration.align() # position image and camera
-        picam2.configure("preview")
+        
+        picam2 = Picamera2() 
         picam2.start()
-
-        model = YOLO('/home/pi/Downloads/best_ncnn_model', task="segment") # load model for type segmentation
+        
+        model = YOLO('/home/pi/YOLO/NCNN/adam-100-epochs/best_ncnn_model', task="segment") # load model for type segmentation
         my_file = open("/home/pi/YOLO/coco.txt", "r") # name class
         data = my_file.read()
         class_list = data.split("\n") # storage data each line
         count = 0
-        detected_objects = set()
-        
-        while True: # loop read img from camera and read every 50 frames
+
+        while True: # loop read img from camera and read every three frames
             im = picam2.capture_array()
-            
-            count += 1
-            if count % 50 != 0:
-                continue
-            
-            im = cv2.flip(im,-1) # Flip the image so that the resulting image is in the correct position
+        
             results = model.predict(im) # predict
             a = results[0].boxes.data # Retrieve the detected frame data
             px = pd.DataFrame(a).astype("float") # convert data a to pandas and make the data float type 
@@ -155,13 +150,11 @@ while True:
                 if confidence >= 0.5:
                     cv2.rectangle(im,(x1,y1),(x2,y2),(0,0,255),2)
                     cvzone.putTextRect(im,f'{c} ({confidence: .2f})',(x1,y1),1,1)
-                    detected_objects.update(c)
                 
-            cv2.imshow("Camera", im) # display
-
-            if cv2.waitKey(1)==ord('q'):
-                break
-        cv2.destroyAllWindows()
+            img = PIL.Image.fromarray(im)
+            img_tk = PIL.ImageTk.PhotoImage(image=img)
+            
+        picam2.stop()
         
         if detected_objects: 
             statusMessage.configure(text=f"Objects detected: {', '.join(detected_objects)}")

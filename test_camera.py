@@ -7,9 +7,10 @@ picam2 = Picamera2()
 picam2.start()
 
 def update_image():
-    frame = picam2.capture_array()
-    img = PIL.Image.fromarray(frame)
+    im = picam2.capture_array()
+    img = PIL.Image.fromarray(im)
     img_tk = PIL.ImageTk.PhotoImage(image=img)
+    
     image_label.configure(image=img_tk)
     image_label.image = img_tk  
 
