@@ -109,7 +109,7 @@ def detect_objects():
         if detected_classes:
             max_delay = max(sterilization_times.get(cls, 0) for cls in detected_classes)
             sterilization_time = max_delay
-            sterilize()
+            sterilize(sterilization_time)
             cancelButton.pack(pady=10)
             root.update()
         else:
@@ -126,33 +126,45 @@ def detect_objects():
 
 
 # function to start sterilization
-def sterilize():
+time_label = ctk.CTkLabel(root,text="",font=("Arial",100),text_color="green")
+time_label.pack(pady=20)
+
+# function to start sterilization
+def sterilize(sterilization_time):
+    global countdown_running, countdown_task
+    countdown_running = True
+    
     GPIO.output(lamp_normal, False)  # Turn off lamp normal
     GPIO.output(lamp_UVC, True)  # Turn on lamp UVC
-
-    for remaining_time in range(sterilization_time, 0, -1):
-        min = remaining_time // 60
-        sec = remaining_time % 60
-        timer_text = f"Time Sterilize: {min}:{sec}"
-        statusMessage.configure(text=timer_text)
+    
+    if i >= 0 and countdown_running:  # Check if countdown is still running
+        minutes, secs = divmod(i, 60)
+        time_format = f"{minutes:02}:{secs:02}"
+        countdown_label.configure(text=time_format)
+        countdown_task = root.after(1000, countdown, i - 1)  # Call countdown again in 1 second
+    else:
+        countdown_label.configure(text="00:00")
+        GPIO.output(lamp_UVC, False)  # Turn off UVC lamp after sterilization is done 
+        time_label.configure(text="")
+        statusMessage.configure(text="Sterilization complete. You can open the door now.")
         root.update()
-        time.sleep(1)
-
-    GPIO.output(lamp_UVC, False)  # Turn off UVC lamp after sterilization is done 
-    statusMessage.configure(text="Sterilization complete. You can open the door now.")
-    root.update()
-    cancelButton.pack_forget()  # Hide cancel button
-    openButtonEject.pack(pady=10)  # Show open button again 
+        cancelButton.pack_forget()  # Hide cancel button
+        openButtonEject.pack(pady=10)  # Show open button again  
 
 # function to cancel sterilization
 def cancel(): 
+    global countdown_running
+    
     startSterilization.pack_forget()  # Hide start button
     cancelButton.pack_forget()  # Hide cancel button 
     GPIO.output(lamp_UVC, False)
     statusMessage.configure(text="Process canceled. Please open the door to reset.")
     root.update()
     openButtonEject.pack(pady=10)  # Show open button again
-    root.update()
+    
+    countdown_running = False # stop time
+    if countdown_task:
+        root.after_cancel(countdown_task)  # Cancel the countdown task
 
 # function to open the door
 def open(): 
