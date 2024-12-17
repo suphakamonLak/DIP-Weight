@@ -26,8 +26,10 @@ GPIO.setwarnings(False)
 # Global variable
 global state
 state = "waiting"
+
 global sterilization_time
 sterilization_time = 0
+
 global sterilization_times
 
 sterilization_times = {  
@@ -107,14 +109,7 @@ def detect_objects():
         if detected_classes:
             max_delay = max(sterilization_times.get(cls, 0) for cls in detected_classes)
             sterilization_time = max_delay
-            
-            statusMessage.configure(text=f"Objects detected: {', '.join(detected_classes)}")
-            root.update()
-
-            statusMessage.configure(text=f"Sterilization time: {sterilization_time} seconds.")
-            root.update()
-            
-            startSterilization.pack(pady=10)
+            sterilize()
             cancelButton.pack(pady=10)
             root.update()
         else:
@@ -131,13 +126,15 @@ def detect_objects():
 
 
 # function to start sterilization
-def startSterilization():
-    startSterilization.pack_forget()  # Hide start button again
+def sterilize():
     GPIO.output(lamp_normal, False)  # Turn off lamp normal
     GPIO.output(lamp_UVC, True)  # Turn on lamp UVC
 
     for remaining_time in range(sterilization_time, 0, -1):
-        statusMessage.configure(text=f"Time remaining: {remaining_time} seconds.")
+        min = remaining_time // 60
+        sec = remaining_time % 60
+        timer_text = f"Time Sterilize: {min}:{sec}"
+        statusMessage.configure(text=timer_text)
         root.update()
         time.sleep(1)
 
@@ -185,7 +182,7 @@ def eject():
     global state
     state = "init"
     
-def startDetect():
+def detect():
     startDetect.pack_forget()
     openButton.pack_forget()
     statusMessage.configure(text="Initializing...")
@@ -195,10 +192,10 @@ def startDetect():
 
 # Buttons 
 openButton = ctk.CTkButton(root, text="open", fg_color="blue", command=open)
-openButtonEject = ctk.CTkButton(root, text="Open", fg_color="yellow", command=eject)
-startSterilization = ctk.CTkButton(root, text="Sterilization", fg_color="green", command=startSterilization)
+openButtonEject = ctk.CTkButton(root, text="Open", fg_color="blue", command=eject)
+startSterilization = ctk.CTkButton(root, text="Sterilize", fg_color="green", command=sterilize)
 cancelButton = ctk.CTkButton(root, text="Cancel", fg_color="red", command=cancel)
-startDetect = ctk.CTkButton(root, text="Start", fg_color="blue", command=startDetect)
+startDetect = ctk.CTkButton(root, text="Start", fg_color="blue", command=detect)
 
 openButton.pack(pady=10) 
 
@@ -215,17 +212,6 @@ while True:
         openButton.pack(pady=10)
         startDetect.pack(pady=10)
         root.update()
-            
-    elif state == "open":
-        time.sleep(1)
-        while GPIO.input(door_sensor) == GPIO.HIGH:  # Wait until door is closed
-            statusMessage.configure(text="Close the door to detect...")
-            root.update()
-            time.sleep(0.1)
-        statusMessage.configure(text="Door is closed. Detecting items...")
-        root.update()
-        time.sleep(1)
-        state = "insert"
 
     elif state == "insert":
         statusMessage.configure(text="Door is closed. Detecting items...")
@@ -233,6 +219,7 @@ while True:
         time.sleep(1)
         detect_objects()
         
+        root.update()
         time.sleep(1)
 
     detected_classes.clear()
