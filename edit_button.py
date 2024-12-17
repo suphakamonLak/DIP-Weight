@@ -132,8 +132,6 @@ def detect_objects():
 
 # function to start sterilization
 def startSterilization():
-    global countdown_running, countdown_task
-    global sterilization_time
     startSterilization.pack_forget()  # Hide start button again
     GPIO.output(lamp_normal, False)  # Turn off lamp normal
     GPIO.output(lamp_UVC, True)  # Turn on lamp UVC
@@ -194,18 +192,6 @@ def startDetect():
     root.update
     global state
     state = "insert"
-    
-def update_countdown(second):
-    def countdown(i):
-        global countdown_task
-        if i >= 0 and countdown_running:  # Check if countdown is still running
-            minutes, secs = divmod(i, 60)
-            time_format = f"{minutes:02}:{secs:02}"
-            countdown_label.configure(text=time_format)
-            countdown_task = root.after(1000, countdown, i - 1)  # Call countdown again in 1 second
-        else:
-            countdown_label.configure(text="00:00")
-    countdown(seconds)
 
 # Buttons 
 openButton = ctk.CTkButton(root, text="open", fg_color="blue", command=open)
@@ -246,8 +232,8 @@ while True:
         root.update()
         time.sleep(1)
         detect_objects()
+        
         time.sleep(1)
-        startSterilization()
 
     detected_classes.clear()
     root.update()
