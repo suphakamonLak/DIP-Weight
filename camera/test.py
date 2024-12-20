@@ -25,13 +25,15 @@ GPIO.setwarnings(False)
 
 # Global variable
 global state
-state = "waiting"
+state = "waiting"       #edit
+
 global sterilization_time
 sterilization_time = 0
-global sterilization_times
+
 global cancel_flag
 cancel_flag = False
 
+global sterilization_times
 sterilization_times = {  
     "box": 10,
     "coin": 15,
@@ -46,11 +48,11 @@ sterilization_times = {
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 root = ctk.CTk()
-root.geometry("750x450")
+root.geometry("1024x600")
 root.title("UVC Sterilization Cabinet")
 
 # Status message
-statusMessage = ctk.CTkLabel(root, text="Please open the Door to insert items...", font=("Arial", 16))
+statusMessage = ctk.CTkLabel(root, text="Please open the Door to insert items...", font=("Arial", 40))
 statusMessage.pack(pady=20)
 
 detected_classes = set()
@@ -64,24 +66,20 @@ def detect_objects():
         data = my_file.read()
         class_list = data.split("\n") 
       
-        camera_frame = ctk.CTkLabel(root)
-        camera_frame.pack(pady=10)
+        camera_frame = ctk.CTkLabel(root, text="", fg_color="black")
+        camera_frame.place(relx=0, rely=0, relwidth=1, relheight=1)
         
-        # time current
-        pastime = time.time()
+        pastime = time.time() # time current
+        window_width = 1024
+        window_height = 600
         
         while (time.time() - pastime) < 10:# 
             im = picam2.capture_array() 
-            im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB) 
+            im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+            im_resized = cv2.resize(im, (window_width, window_height))
             
-            img = Image.fromarray(im)
-            img_tk = ImageTk.PhotoImage(image=img)
-            
-            camera_frame.configure(image=img_tk)
-            camera_frame.image = img_tk
-            root.update()
-        
-            results = model.predict(im)
+            # predict
+            results = model.predict(im_resized)
             a = results[0].boxes.data  
             px = pd.DataFrame(a).astype("float")
             
@@ -93,28 +91,38 @@ def detect_objects():
                 
                 if confidence >= 0.5:  
                     detected_classes.add(class_name)
-                    cv2.rectangle(im, (x1, y1), (x2, y2), (0, 0, 255), 2) 
-                    cvzone.putTextRect(im, f'{class_name} ({confidence:.2f})', (x1, y1), 1, 1)
+                    cv2.rectangle(im_resized, (x1, y1), (x2, y2), (0, 0, 255), 2) 
+                    cvzone.putTextRect(im_resized, f'{class_name} ({confidence:.2f})', (x1, y1+10), 1, 1)
             
-            if detected_classes:
-                picam2.stop()  # Stop the camera after detection
-                camera_frame.configure(image=None)  # Clear the frame from the GUI
-                camera_frame.image = None
-                camera_frame.pack_forget()
-                break  # Exit the loop as objects are detected
-            
-            img = Image.fromarray(im)
+            img = Image.fromarray(im_resized)
             img_tk = ImageTk.PhotoImage(image=img)
+            camera_frame.configure(image=img_tk)
+            camera_frame.image = img_tk
+
+            root.update()
+            
+#             if detected_classes:
+#                 picam2.stop()  # Stop the camera after detection
+#                 camera_frame.configure(image=None)  # Clear the frame from the GUI
+#                 camera_frame.image = None
+#                 camera_frame.place_forget()
+#                 break  # Exit the loop as objects are detected
         
         if detected_classes:
-            max_delay = max(sterilization_times.get(cls, 0) for cls in detected_classes)
+            time.sleep(10)
+            picam2.stop()
+            camera_frame.configure(image=None)  # Clear the frame from the GUI
+            camera_frame.image = None
+            camera_frame.place_forget()
+        
+            max_delay = max(sterilization_times.get(cls, 0) for cls in detected_classes) # find time max
             sterilization_time = max_delay
             sterilize(sterilization_time)
-            cancelButton.pack(pady=10)
             root.update()
         else:
-            statusMessage.configure(text="No items detected. Please open the door to reset.")
-            openButtonEject.pack(pady=10)
+            cancelButton.place_forget()          #edit
+            statusMessage.configure(text="No items detected. Please open the door to reset.", font=("Arial", 30))
+            openButtonEject.place(relx=0.5, rely=0.5, anchor="center")
             root.update()
             
     global state
@@ -122,72 +130,86 @@ def detect_objects():
     picam2.stop()
     camera_frame.configure(image=None)  # Clear the frame from the GUI
     camera_frame.image = None
-    camera_frame.pack_forget()
-
+    camera_frame.place_forget()
 
 # function to start sterilization
 time_label = ctk.CTkLabel(root,text="",font=("Arial",100),text_color="green")
 time_label.pack(pady=20)
+
 
 # function to start sterilization
 def sterilize(sterilization_time):
     global cancel_flag
     cancel_flag = False  # Reset cancel flag before starting sterilization
 
+    cancelButton.place(relx=0.5, rely=0.7, anchor="center")     #edit
     GPIO.output(lamp_normal, False)  # Turn off lamp normal
     GPIO.output(lamp_UVC, True)  # Turn on lamp UVC
+    
+    end_time = time.time() + sterilization_time
+    interval = 1
+    previous_time = time.time()
 
-    for remaining_time in range(sterilization_time, 0, -1):
-        if cancel_flag:  # Check if cancel flag is True
-            break  # Exit the loop immediately
-
-        min = remaining_time // 60
-        sec = remaining_time % 60
-        time_format = f"{min:02}:{sec:02}"
-
-        statusMessage.configure(text="Time Sterilize")
-        time_label.configure(text=f"{time_format}")
-        root.update()
-        time.sleep(1)
+    while True:
+        current_time = time.time()
+        remaining_time = int(end_time - current_time)
+            
+        if remaining_time <= 0 or cancel_flag:
+            break
+        
+        if current_time - previous_time >= interval:
+            previous_time = current_time
+                
+            min = remaining_time // 60
+            sec = remaining_time % 60
+            time_format = f"{min:02}:{sec:02}"
+            
+            statusMessage.configure(text="Sterilizing")     #edit
+            time_label.configure(text=f"{time_format}")
+            root.update()
 
     GPIO.output(lamp_UVC, False)  # Turn off UVC lamp after sterilization or cancellation
     time_label.configure(text="")  # Clear the time label
     if cancel_flag:
-        statusMessage.configure(text="Process canceled. Please open the door to reset.")
+        pass
     else:
-        statusMessage.configure(text="Sterilization complete. You can open the door now.")
+        statusMessage.configure(text="Sterilization complete. Please open the door to get your items." , font=("Arial", 30)) #edit
 
-    cancelButton.pack_forget()  # Hide cancel button
-    openButtonEject.pack(pady=10)  # Show open button again  
+    cancelButton.place_forget()  # Hide cancel button
+    openButtonEject.place(relx=0.5, rely=0.5, anchor="center")  # Show open button again  
 
     root.update()
 
 # function to cancel sterilization
 def cancel():
+    statusMessage.configure(text="")    
+    time_label.configure(text="")
     global cancel_flag
     cancel_flag = True  # Set cancel flag to True
-    GPIO.output(lamp_UVC, False)  # Turn off UVC lamp immediately
-    statusMessage.configure(text="Process canceled. Please open the door to reset.")
+    cancelButton.place_forget()  # Hide cancel button
     root.update()
-    cancelButton.pack_forget()  # Hide cancel button
-    openButtonEject.pack(pady=10)  # Show open button again
-ัดพักเดกเ้ด
+    GPIO.output(lamp_UVC, False)  # Turn off UVC lamp immediately
+    statusMessage.configure(text="Process canceled. Please open the door to get your items.")
+    openButtonEject.place(relx=0.5, rely=0.5, anchor="center")
+    root.update()
+
 # function to open the door
-def open(): 
+def open():
     GPIO.output(lamp_normal, True)  # Turn on normal lamp
     GPIO.output(door_lock, True)  # Unlock the door
     statusMessage.configure(text="Door unlocked. Please insert items.")
     root.update()
     time.sleep(0.5)
     GPIO.output(door_lock, False)  # Lock the door again
-    openButton.pack_forget()
-    startDetect.pack_forget()
-    
+    openButton.place_forget()
+    startDetect.place_forget()
+   
     global state
     state = "init"
     
 def eject():
-    openButtonEject.pack_forget()
+    time.sleep(1)
+    openButtonEject.place_forget()
     GPIO.output(lamp_normal, True)  # Turn on normal lamp
     GPIO.output(door_lock, True)  # Unlock the door
     statusMessage.configure(text="Door unlocked. Please move your items.")
@@ -201,21 +223,21 @@ def eject():
     state = "init"
     
 def detect():
-    startDetect.pack_forget()
-    openButton.pack_forget()
-    statusMessage.configure(text="Initializing...")
+    startDetect.place_forget()
+    openButton.place_forget()
+    GPIO.output(lamp_normal, True)
+    #statusMessage.configure(text="Initializing...")        #edit
     root.update
     global state
     state = "insert"
 
-# Buttons 
-openButton = ctk.CTkButton(root, text="open", fg_color="blue", command=open)
-openButtonEject = ctk.CTkButton(root, text="Open", fg_color="blue", command=eject)
-startSterilization = ctk.CTkButton(root, text="Sterilize", fg_color="green", command=sterilize)
-cancelButton = ctk.CTkButton(root, text="Cancel", fg_color="red", command=cancel)
-startDetect = ctk.CTkButton(root, text="Start", fg_color="blue", command=detect)
+# Buttons
+openButton = ctk.CTkButton(root, corner_radius=15, text="open", font=("Arail", 50, "bold"), fg_color="#6495ED", hover_color="#4d7fd9", height=100, width=220, command=open)
+openButtonEject = ctk.CTkButton(root, corner_radius=15, text="Open", font=("Arail", 50, "bold"),fg_color="#6495ED", hover_color="#4d7fd9", height=100, width=220, command=eject)
+cancelButton = ctk.CTkButton(root, corner_radius=15, text="Cancel", fg_color="#de3163", hover_color="#af204a", font=("Arail", 50, "bold"), height=100, width=220, command=cancel)
+startDetect = ctk.CTkButton(root, corner_radius=15, text="Start", font=("Arail", 50, "bold"), fg_color="#18ad5f", hover_color="#119b53", height=100, width=220, command=detect)
 
-openButton.pack(pady=10) 
+openButton.place(relx=0.5, rely=0.5, anchor="center")
 
 # Main Loop
 while True:
@@ -223,12 +245,12 @@ while True:
         time.sleep(0.1)  # Waiting for door to be closed
         
     elif state == "init":
-        while GPIO.input(door_sensor) == GPIO.HIGH:
+        while GPIO.input(door_sensor) == GPIO.HIGH:     #edit
             statusMessage.configure(text="")# Wait until door is closed
             time.sleep(0.1)
-            
-        openButton.pack(pady=10)
-        startDetect.pack(pady=10)
+        statusMessage.configure(text="Open Door or Start Sterilize.")   #edit
+        openButton.place(relx=0.35, rely=0.5, anchor="center")
+        startDetect.place(relx=0.65, rely=0.5, anchor="center")
         root.update()
 
     elif state == "insert":
